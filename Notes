@@ -1,0 +1,108 @@
+²   pivot
+select concat(year(date),'-',month(date)),sum([TPL1]) as TPL1,sum([TPL2]) as TPL2,sum([TPL3]) as TPL3 from 
+(select * from Chemical where kind='KI' and detail='') as tt
+pivot(sum(value)
+for plant in ([TPL1],[TPL2],[TPL3])) as pivot_table
+group by year(date),month(date)
+order by year(date),month(date)
+²   update data
+update AbnormalRecord set bigitem=N'面取り収率' where bigitem='面取收率'
+
+²   table join
+select * from (select plant,convert(date,date,120) as 'date',kind,sum(value) as value from chemical
+where detail=''
+group by plant,date,kind) 
+a left join (select day,imt14,sum(mennseki) as mennseki from Yield_Info_new_2 group by day,imt14) b on a.date=b.day and a.plant=b.imt14
+order by date
+
+²   日期格式轉字串，並將yyyy-mm-ddèyyyy/mm/dd
+select [id], left(CONVERT(varchar,day,111),4) + '/' 
+       + case when left(SUBSTRING(CONVERT(varchar,day,111),6,2),1) = '0' then right(SUBSTRING(CONVERT(varchar,day,111),6,2),1) else SUBSTRING(CONVERT(varchar,day,111),6,2) end   + '/' 
+       + case when left(right(CONVERT(varchar,day,111),2),1) = '0' then right(right(CONVERT(varchar,day,111),2),1) else right(CONVERT(varchar,day,111),2) end as 'day', [imt14], [ktp06], [ktp061], [ktp07], [ktp071], [製品品名], [製品Lot], [狀態], [時間], [米數], [PVA], [PVA Loss], [上TAC], [上TAC Loss], [下TAC], [下TAC Loss], [PF], [PF Loss], [S米數], [E米數], [E/S米數], [光學/翹曲測定米數], [TAC切替製品LOSS米數S], [TAC切替製品LOSS米數E], [PF切替製品LOSS米數S], [PF切替製品LOSS米數E], [製品切替製品LOSS米數S], [製品切替製品LOSS米數E], [首卷製品切替LOSS米數S], [首卷製品切替LOSS米數E], [PVA廢棄M], [上TAC廢棄M], [下TAC廢棄M], [PF廢棄M], [備註], [PVA品名], [貼合速度], [幅寬], [PVA延伸倍率], [KindOfPVA], [SeriesFromLaminatedGrade], [PVAWide], [KindOfWideFromGrade], [PlantFromGrade], [loss], [mennseki], [mennseki(PVA)], [mennseki(上TAC)], [mennseki(下TAC)], [mennseki(PF)], [mennseki(PVA Loss)], [mennseki(上TAC Loss)], [mennseki(下TAC Loss)], [mennseki(PF Loss)], [量產/試作], [班別], [KindOfPVA(detail)] from Yield_Info_new_2
+
+²   Tableau SQL語法
+n   WBC KPI Trend Chart
+select * from (select [Plant] as 'c_Plant', case when isdate(date)=1 then left(date,4) + '/' 
+       + case when left(SUBSTRING(date,6,2),1) = '0' then right(SUBSTRING(date,6,2),1) else SUBSTRING(date,6,2) end   + '/' 
+       + case when left(right(date,2),1) = '0' then right(right(date,2),1) else right(date,2) end else [Date]
+        end as 'c_Date', [KPI_item], [Value] from WBC_data where plant not like '%[^A-Za-z0-9]%') a left join (select * from AbnormalRecord where class='WBC') b on a.c_Date=b.date and a.c_Plant=b.plant
+n   Yield Info of TPL
+select * from (select [id], [day],left(CONVERT(varchar,day,111),4) + '/' 
+       + case when left(SUBSTRING(CONVERT(varchar,day,111),6,2),1) = '0' then right(SUBSTRING(CONVERT(varchar,day,111),6,2),1) else SUBSTRING(CONVERT(varchar,day,111),6,2) end   + '/' 
+       + case when left(right(CONVERT(varchar,day,111),2),1) = '0' then right(right(CONVERT(varchar,day,111),2),1) else right(CONVERT(varchar,day,111),2) end as 'day1', [imt14], [ktp06], [ktp061], [ktp07], [ktp071], [製品品名], [製品Lot], [狀態], [時間], [米數], [PVA], [PVA Loss], [上TAC], [上TAC Loss], [下TAC], [下TAC Loss], [PF], [PF Loss], [S米數], [E米數], [E/S米數], [光學/翹曲測定米數], [TAC切替製品LOSS米數S], [TAC切替製品LOSS米數E], [PF切替製品LOSS米數S], [PF切替製品LOSS米數E], [製品切替製品LOSS米數S], [製品切替製品LOSS米數E], [首卷製品切替LOSS米數S], [首卷製品切替LOSS米數E], [PVA廢棄M], [上TAC廢棄M], [下TAC廢棄M], [PF廢棄M], [備註], [PVA品名], [貼合速度], [幅寬], [PVA延伸倍率], [KindOfPVA], [SeriesFromLaminatedGrade], [PVAWide], [KindOfWideFromGrade], [PlantFromGrade], [loss], [mennseki], [mennseki(PVA)], [mennseki(上TAC)], [mennseki(下TAC)], [mennseki(PF)], [mennseki(PVA Loss)], [mennseki(上TAC Loss)], [mennseki(下TAC Loss)], [mennseki(PF Loss)], [量產/試作], [班別], [KindOfPVA(detail)] from Yield_Info_new_2) a left join (select [plant], [date], [abnormal], [bigitem], [description], [minute], [reason], [measures], [effect], [unit], [note], [class] from AbnormalRecord where class='生產') b on a.day1=b.date and a.imt14=b.plant
+n   Info of Unit Cost
+select * from Unit_CountData a left join (SELECT [plant], [date], [abnormal], [bigitem], [description], [minute], [reason], [measures], [effect], [unit], [note], [class] from AbnormalRecord where class ='生產') b on a.期別=b.plant and a.日期=b.date
+n   Info of Chemical
+select * from (select plant,convert(date,date,23) as date,kind,sum(value) as value from chemical where detail=''
+group by plant,date,kind) a left join (select day,imt14,sum(mennseki) as mennseki from Yield_Info_new_2
+group by day,imt14) b on a.date=b.day and a.plant=b.imt14
+n   Info of Unit
+select * from Unit_AllData a left join (SELECT [plant], [date], [abnormal], [bigitem], [description], [minute], [reason], [measures], [effect], [unit], [note], [class] from AbnormalRecord where class ='生產') b on a.期別=b.plant and a.日期=b.date
+n   jij
+²   update+join語法
+n   update AbnormalRecord 
+set bigitem = (case when 分類 is null then bigitem else 分類 end) from AbnormalRecord left join (select 大項目,case when 細項 is null then '' else 細項 end 細項,分類 from [dbo].[工作表1$] ) d on CHARINDEX(d.大項目,abnormal) > 0 and bigitem = d.細項 where class = '生產'
+²   count不重覆
+select count(ktq05_2) from (select distinct ktq05_2 from BMaterial where ktp05 like 'H%' and ktp06>='2019-09-19' and ktp06<='2020-01-05') tt
+²   創建table(複製)
+select * into tt from MatMaster
+²   Yield_info_new_2加上高溫高延伸
+select TOP 100 PERCENT * 
+from (
+         select *,dbo.High_Temperature_and_High_Elongation(dbo.GetPlantFromGrade(RTRIM(製品品名)), 
+                 dbo.GetPVAWideFromPVAGrade(RTRIM(PVA品名)), dbo.GetKindOfWideFromGrade(幅寬), 
+                 dbo.GetKindOfPVA_forQualityLevel(RTRIM(PVA品名)), dbo.GetSeriesFromLaminatedGrade(RTRIM(製品品名)), 
+                 ktp06) as '高溫高延伸',dbo.PID_Chromatic_Model(dbo.GetPlantFromGrade(RTRIM(製品品名)), 
+                 dbo.GetKindOfWideFromGrade(幅寬), dbo.GetSeriesFromLaminatedGrade(RTRIM(製品品名))) as PID_低Ty_低色度 from Yield_Info_new_2 where day='2020-04-28' and len(製品Lot)=9 and (製品Lot<>'') and (製品Lot like 'Z%' or 製品Lot like 'C%' or 製品Lot like 'H%' or 製品Lot like 'U%' or 製品Lot like 'R%'or 製品Lot like '3%')
+     ) a 
+left join (
+         select qbm04,avg(qbnn04) as 'Ty(Avg)' 
+         from CtrlInfo 
+         where qbn04='E001' group by qbm04
+     ) b on a.製品Lot=b.qbm04
+
+order by concat(a.ktp06,a.ktp061)
+²   SQL上使用迴圈
+DECLARE @s datetime
+
+DECLARE @i int
+declare @value int
+declare @dat datetime
+-- 設定參數初始值
+
+SET @s = '2020-01-01'
+
+SET @i = 1
+while @i<32
+begin
+     set @dat=@s
+     set @value=(select sum(value) from Chemical where plant='TPL3' and date>DATEADD(hour, 8, @s) and date<= DATEADD(hour, 8, DATEADD(day, 1, @s)) and kind like 'KR-15%' and not(kind like '%試作%'))
+     INSERT INTO tt values(@dat, @value)
+
+    SET @i = @i + 1
+    SET @s = DATEADD(DAY, 1, @s)
+
+End
+²   Group by(切0800)：
+SELECT case when date > DATEADD(HH,8,dateadd(m, datediff(m,0,date),0)) and date <= DATEADD(HH,8,dateadd(m, datediff(m,0,date)+1,0)) then concat(year(date),'-',month(date)) 
+              else concat(year(dateadd(m, datediff(m,0,date)-1,0)),'-',month(dateadd(m, datediff(m,0,date)-1,0)))
+              end mydate
+       ,sum(value) value
+  FROM [PL_DB].[dbo].[Chemical]
+  where plant='TPL3' 
+  and kind like 'KR-70%' 
+  and not(kind like '%試作%')
+  group by case when date > DATEADD(HH,8,dateadd(m, datediff(m,0,date),0)) and date <= DATEADD(HH,8,dateadd(m, datediff(m,0,date)+1,0)) then concat(year(date),'-',month(date)) 
+              else concat(year(dateadd(m, datediff(m,0,date)-1,0)),'-',month(dateadd(m, datediff(m,0,date)-1,0)))
+              end
+²   OF data
+select a.sfb01,a.sfb05,a.ima02,a.ima82,a.ima81,a.sfv09,a.sfv091,a.sfv092,a.sfa03,a.ima02_m,a.ksk04,a.ksq04,a.qce03,case when a.ksq061>0 then 0 else a.ksq05 end as 'ksq05',a.ksq061,a.pllot,a.rwlot,a.ltclot,a.lplant,a.cmax,case when a.ltcname is null then dbo.getplantfromgrade(a.ima02_m) else dbo.getplantfromgrade(a.ltcname) end  as 'plant',case when substring(b.ima10,1,1)='G' then 'Y' else 'N' end as '車載品' from csfra01 a left join matmaster b on a.sfa03=b.ima01 where a.cmax>='2019-01-01' and substring(a.sfb05,1,1)='5' and (a.sfb01 like '216%' or a.sfb01 like '2A6%') and a.arivet=100
+
+select top 100 percent * from (select plant,cast(DATEADD(HH, - 8, concat(date,' ',time)) as date) date,sum([KI]) as KI,sum([BA]) as BA,sum([I2]) as I2,sum([SPM-01]) as 'SPM-01',sum([Z-200]) as 'Z-200',sum([亞硫酸鉀]) as 亞硫酸鉀,sum([KR-15P]) as 'KR-15P',sum([KR-70TKR-70TI]) as 'KR-70TKR-70TI',sum([活性碳]) as 活性碳,Note_1,Note_2,Note_3,Note_4 from 
+(select * from Chemical_new where cast(DATEADD(HH, - 8, concat(date,' ',time)) as date)>='2017-01-01') as tt
+pivot(sum(value)
+for kind in ([KI],[BA],[I2],[SPM-01],[Z-200],[亞硫酸鉀],[KR-15P],[KR-70TKR-70TI],[活性碳])) as pvt_table
+group by plant,date,time,Note_1,Note_2,Note_3,Note_4) a join (select day,imt14,sum([量產S]) as '量產',sum([試作T]) as '試作' from (select * from Yield_Info_new_2 where day>='2017-01-01') as tt
+pivot(sum(mennseki) 
+for [量產/試作] in ([量產S],[試作T])) as pivot_table
+group by day,imt14) b on a.date=b.day and a.plant=b.imt14 order by date
