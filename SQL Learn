@@ -188,3 +188,198 @@ drop table: 砍掉這個table
 create table: 馬上再建立剛剛被砍掉的table
 SQL: 要塞什麼data給現在要建立的table
 最後select: 把建好的table叫出來看看
+
+-------------------------------------
+
+
+平常我们使用 hive或者 mysql时，一般聚合函数用的比较多。但对于某些偏分析的需求，group by可能很费力，子查询很多，这个时候就需要使用窗口分析函数了~
+hive、oracle提供开窗函数，mysql不提供
+
+group by 与over(partition by …)主要区别为，带上group by的hive sql语句只能显示与分组聚合相关的字段，而带上over(partition by …)的hive sql语句能显示所有字段.。
+
+分析函数用于计算基于组的某种聚合值，它和聚合函数的不同之处是：对于每个组返回多行，而聚合函数对于每个组只返回一行。
+开窗函数指定了分析函数工作的数据窗口大小，这个数据窗口大小可能会随着行的变化而变化
+
+首先介绍下Over子句中rows between,也叫做window子句(窗口子句）：
+sum(gmv) over(order by gmv rows between unbounded preceding and current row)
+如果不指定rows between，默认为从起点到当前行；
+如果不指定order by，则将分组内所有值累加；
+preceding:往前
+following：往后
+current rows：当前行
+unbounded：起点
+unbounded preceding：表示从前面的起点
+unbounded following：表示到后面的终点
+rows between unbounded preceding and current row 是最常用的定位框架，可以省略
+
+1、sum(columns) over (partition by col1 order by col2 rows between n/unbounded preceding and m following/current row )
+order by子句可以对结果集按照指定的排序规则进行排序，并且在一个指定的范围内进行聚合运算。
+
+2、ntile(2) over(partition by group order by gmv desc）
+ntile(n),用于将分组数据按照顺序切分成N片，返回当前切片值。ntile不支持rows between，如果切片不均匀，默认增加第一个切片的分布。 NTILE这个很强大，以前要获取一定比例的数据是非常困难的，NTILE就是把有序分区中的行分发到指定数据的组中，各个组有编号，编号从1开始，对于每一行，NTILE返回此行所属的组的编号。
+
+3、排序函数
+rank(),生成数据项在分组中的排名，排名相等会在名次中留下空位。
+row_number(),从1开始，按照顺序，生成分组内记录的序列
+dense_rank(),生成数据项在分组中的排名，排名相等会在名词中不会留下空位。
+
+4、 first_value(city) over(partition by group order by gmv desc/Asc) : 按分组排序后，取范围内第一个值
+last_value,按分组排序后，取范围内，最后一个值，如果是用默认定义框架，则会出错
+
+5、 lead(column,1,null) over(partition by group order by gmv desc)
+lag(city,1,null) over(partition by group order by gmv desc)
+如果要取排名前/后两位的城市，调整lag和lead第二个参数即可。第三个参数为默认值，可以省略，省略的话，默认取不到时是 NULL，如果不省略的话，取不到时则取指定默认值。
+
+------------------------------
+
+1.用SQL选出每个人成绩的最高的前两条纪录
+原表记录：
+
+zs,math,75
+zs,chinese,81
+lisi,chinese,76
+lisi,math,89
+wangwu,math,100
+wangwu,chinese,81
+wangwu,english,99
+zhaoliu,math,16
+zhaoliu,english,48
+zhaoliu,chinese,59
+
+需要对name进行分组，对成绩进行排名，所以考虑使用窗口函数，目前mysql 8.0支持窗口函数，该操作是在hive上执行的查询结果：
+
+
+select * from (select *, rank() over(partition by name order by fenshu desc) as flag from studentss)t where t.flag<=2;
+lisi    math    89    1
+lisi    chinese    76    2
+wangwu    math    100    1
+wangwu    english    99    2
+zhaoliu    chinese    59    1
+zhaoliu    english    48    2
+zs    chinese    81    1
+zs    math    75    2
+
+
+2.查询成绩表中每一科成绩最高的分数以及这个学生的名字，学科名，面试的时候碰到的问题
+
+select * from (select *, rank() over(partition by kecheng order by fenshu desc) as flag from studentss)t where t.flag<=1;
+wangwu    chinese    81    1
+zs    chinese    81    1
+wangwu    english    99    1
+wangwu    math    100    1
+
+
+3.学生成绩表，把每科最高分前两名统计出来学生成绩表，把每科最高分前两名统计出来
+
+select * from (select *, rank() over(partition by kecheng order by fenshu desc) as flag from studentss)t where t.flag<=2;
+wangwu    chinese    81    1
+zs    chinese    81    1
+wangwu    english    99    1
+zhaoliu    english    48    2
+wangwu    math    100    1
+lisi    math    89    2
+
+ 
+
+ 
+
+4.写一条sql删除订单表中重复的记录
+sql中常规做法：
+
+delete  from studentss where bianhao not in (
+    select t.no from (
+    select min(bianhao) no from studentss group by xuehao,name,kechenghao,kecheng,fenshu
+    )t
+)
+
+通过窗口函数的做法：
+
+select * from (select *, ROW_NUMBER() over(partition by name,kecheng,fenshu) as flag from studentss)t where flag>1;
+
+
+5.一张网页浏览信息表，有两列，一列是网页ip，一列是浏览网页的用户（比如a或者b、c、d直到z），求这些网页被a和b或者a和c或者b和c两两组合访问的次数
+这个题目源于，有一张team表，表种有a,b,c,d 四个队伍，求他们之间两两进行白赛的对阵信息。
+
+原表：
+
+a
+
+b
+
+c
+
+d
+
+
+select * from a,b where a.name>b.name;
+
+b        a
+c        a
+d        a
+c        b
+d        b
+d        c
+
+ 
+
+ 
+
+ 
+
+6.找出单科成绩高于该科平均成绩的同学名单（无论该学生有多少科，只要有一科满足即可）
+ 
+
+我的做法应该是比较笨的做法，
+
+select distinct name from students left join ( 
+select kecheng,avg(fenshu) as avg_score from students group by kecheng
+) tmp on students.kecheng=tmp.kecheng where students.fenshu>tmp.avg_score;
+
+ 
+
+下面是使用窗口函数 解决上面的问题：
+
+step1 : 通过窗口函数，对课程分组， 求课程的平均成绩：
+
+select * from (select *, AVG(fenshu) over(partition by kecheng) as flag from studentss)t;
+
+zhaoliu    chinese    59    74.25
+wangwu    chinese    81    74.25
+lisi    chinese    76    74.25
+zs    chinese    81    74.25
+zhaoliu    english    48    73.5
+wangwu    english    99    73.5
+zhaoliu    math    16    70.0
+wangwu    math    100    70.0
+lisi    math    89    70.0
+zs    math    75    70.0
+
+step2：过滤出 成绩大于平均成绩的学生
+
+select * from (select *, AVG(fenshu) over(partition by kecheng) as flag from studentss)t where fenshu >t.flag;
+
+wangwu    chinese    81    74.25
+lisi    chinese    76    74.25
+zs    chinese    81    74.25
+wangwu    english    99    73.5
+wangwu    math    100    70.0
+lisi    math    89    70.0
+zs    math    75    70.0
+
+ 
+
+
+7.找出单科成绩高于该科平均成绩的同学名单（该学生所有科都必须满足）
+ 
+
+select distinct name from students where name not in(
+select  distinct name from students left join ( 
+select kecheng,avg(fenshu) as avg_score from students group by kecheng
+) tmp on students.kecheng=tmp.kecheng where students.fenshu<tmp.avg_score
+);
+
+窗口函数（因为hive是不支持子查询的，所以这里用left outer join 替代）
+
+select distinct a.name from studentss a left outer join (select * from (select *, AVG(fenshu) over(partition by kecheng) as flag from studentss)t where t.flag<=fenshu) b on a.name = b.name and a.kecheng=b.kecheng and a.fenshu=b.fenshu and b.fenshu is not null;
+
+ 
