@@ -1,0 +1,190 @@
+用途: 將字串以指定的次數重複顯示
+用法: REPLICATE ( '字串' ,次數)
+
+
+
+現在，學號長度必須為5。因此要在前面補0，湊足5個數字。
+
+SELECT REPLICATE('0',4)+ 學號,姓名 FROM 學生資料表 ORDER BY NO
+
+上面的語法將學號前補上四個0，湊成了5碼。但要是學號是雙位數時，就會變成0000+11=000011，變成6碼了。
+為避免上面的問題，可以使用LEN取得欄位長度再減去該欄位的總長(5)，就能在學號前用0補上不足的長度了。
+
+SELECT REPLICATE('0',5-LEN(學號))+ 學號 AS 學號,姓名 
+FROM Table ORDER BY 學號
+
+
+----------------------------------------------
+
+在SQL Server中搜尋關鍵字
+想要搜尋特定關鍵字在SQL Server的檢視(View)、預存程序(Stored Procedure)、純量函數、資料表函數..等是否存在時。
+https://dotblogs.com.tw/BerryNote/2016/09/30/110930
+
+
+-----------------------------------------------
+
+--定義迴圈參數
+DECLARE  
+@TotalNum INT, --執行次數
+@Num INT       --目前次數
+
+--設定迴圈參數
+SET @TotalNum = 10 --執行次數
+SET @Num =1        --目前次數 
+
+--執行WHILE迴圈
+WHILE @Num <= @TotalNum  --當目前次數小於等於執行次數
+BEGIN
+
+    /*
+    這裡放要執行的SQL
+    */
+
+    --設定目前次數+1
+    SET @Num = @Num + 1
+END
+
+
+--建立佔存表
+CREATE TABLE #TEMPTABLE
+(  
+Number INT,     --號碼
+Value CHAR (20) --說明
+)
+
+
+--定義迴圈參數
+DECLARE  
+@TotalNum INT,  --執行次數
+@Num INT,       --目前次數
+@Value CHAR (20)--Value
+
+--設定迴圈參數
+SET @TotalNum = 10 --執行次數
+SET @Num =1        --目前次數 
+
+--執行WHILE迴圈
+WHILE @Num <= @TotalNum  --當目前次數小於等於執行次數
+BEGIN
+	--設@Value的值
+	SET @Value='這是第'+ CONVERT(varchar,@Num)+'幾次執行'
+	
+	--INERT到置存表裡
+	INSERT #TEMPTABLE (Number,Value)
+	           VALUES (@Num,@Value)
+
+	--設定目前次數+1
+	SET @Num = @Num + 1
+END
+
+
+SELECT * FROM #TEMPTABLE
+
+
+-------------------------------------------
+
+INSERT語法中不包括自動遞增的欄位。
+若要指定自動遞增欄位的值，SET IDENTITY_INSERT(OFF與ON)，與定義出要INSERT的欄位(No,Field1,Field2,Field3,...)
+
+
+
+SET IDENTITY_INSERT [Table_A] OFF
+
+Insert INTO [Table_A]
+(No,[Field1],[Field2],[Field3]...)
+Select 
+No,[Filed1],[Filed2],[Filed3]...
+FROM [Table_B]
+
+SET IDENTITY_INSERT [Table_A] ON
+
+
+
+--------------------------------------
+
+DROP TABLE IF EXISTS ithelp_asso_t1_category; 
+CREATE TABLE ithelp_asso_t1_category as 
+select 
+row_number() over (Partition by 1 order by category) category_no,
+B.category,
+B.cnt,
+B.total,
+ROUND(B.cnt::numeric*100/B.total::numeric,2) percentage
+--------以下B層--------
+from( 
+select 
+A.category,
+A.total,
+SUM(1) cnt
+--------以下A層--------
+from(
+select SO.*,LJ.total
+from ithelp_asso_source SO
+--------以下Left Join層--------
+LEFT JOIN(
+select
+name,
+SUM(1) over (PARTITION BY 1) total
+from(
+select name
+from ithelp_asso_source
+group by name
+) LJA --LJ層裡面包了一個LJ的A層
+) LJ
+--------以上Left Join層--------
+on SO.name = LJ.name
+) A
+--------以上A層--------
+group by category,total
+) B
+--------以上B層--------
+; 
+select * from ithelp_asso_t1_category
+
+---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS ithelp_asso_fun1(r int, s int);
+DROP FUNCTION IF EXISTS ithelp_asso_fun2(u int, v int);
+DROP TABLE IF EXISTS ithelp_asso_t3_setof; 
+CREATE TABLE ithelp_asso_t3_setof as 
+
+select
+C.共選次數,
+p1.category 商品1名稱, 
+p2.category 商品2名稱, 
+p1.category||'_'||p2.category 組合名稱,
+C.商品1編號, 
+C.商品2編號, 
+C.組合編號
+
+from(
+select
+SUM(1) 共選次數, 
+2 "商品1編號", 
+6 "商品2編號", 
+2||'_'||6 組合編號
+from(
+select A.* 
+from(
+select
+name, 
+SUM(1) cnt
+from ithelp_asso_t2_source_no
+where category_no in (2,6) 
+group by name 
+) A 
+where cnt =2 
+) B 
+group by cnt
+) C 
+LEFT JOIN ithelp_asso_t1_category p1 
+on C.商品1編號 = p1.category_no
+LEFT JOIN ithelp_asso_t1_category p2 
+on C.商品2編號 = p2.category_no
+; 
+select * from ithelp_asso_t3_setof
+
+順序說明 : 
+drop table: 砍掉這個table
+create table: 馬上再建立剛剛被砍掉的table
+SQL: 要塞什麼data給現在要建立的table
+最後select: 把建好的table叫出來看看
