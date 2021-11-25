@@ -1,0 +1,72 @@
+ 靜態寫法 :
+        SELECT  [Reader_No], [RFID], [Tunnel_Name], [Record_Time]
+        ,D.名稱
+       ,B.*
+        ,[mission], [shift]
+FROM [dbo].[RFID_InOutRecord] A
+LEFT JOIN
+(
+     SELECT 
+            [HR_EMP_ID], [HR_EMP_NAME], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+           ,SUM([有機溶劑]) [有機溶劑],SUM([固定式起重機]) [固定式起重機],SUM([急救人員]) [急救人員],SUM([特化物質]) [特化物質],SUM([堆高機]) [堆高機]
+     FROM
+     (
+         SELECT *
+         FROM
+         (
+              SELECT [HR_EMP_ID], [DEPT], [HR_EMP_NAME], [LICENSE_NAME], [LICENSE_ID], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+------>此行判斷證照有無過期                  ,case when DATEDIFF(day,GETDATE(),LICENSE_DUE_DATE) < 0 then 0 else 1 end 'Due_Day'
+              FROM [NEW_LICENSE]
+         ) A
+         PIVOT
+         (
+              COUNT([Due_Day])
+              FOR [LICENSE_NAME] IN ([有機溶劑],[固定式起重機],[急救人員],[特化物質],[堆高機])
+         ) T
+     ) AD
+     GROUP BY [HR_EMP_ID], [HR_EMP_NAME], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+) B ON A.Employee_Id = B.HR_EMP_ID
+LEFT JOIN ERT C ON B.HR_EMP_NAME = C.name
+LEFT JOIN [employee_list] D ON A.Employee_Id = D.員工代號
+ORDER BY Record_Time
+------------------------------------------------------------------------------------------------------------------------
+        動態寫法 :
+        DECLARE @sql_str VARCHAR(8000), @sql_col VARCHAR(8000), @sql_col2 VARCHAR(8000)
+SELECT @sql_col = ISNULL(@sql_col + ',','') + QUOTENAME( [LICENSE_NAME]) FROM [PL_DB].[dbo].[NEW_LICENSE] GROUP BY  [LICENSE_NAME]
+SELECT @sql_col2 = ISNULL(@sql_col2 + ',','') + 'SUM(' + QUOTENAME( [LICENSE_NAME])+') ' + QUOTENAME( [LICENSE_NAME]) FROM [PL_DB].[dbo].[NEW_LICENSE] GROUP BY  [LICENSE_NAME]
+
+     SET @sql_str = 
+     'SELECT  [Reader_No], [RFID], [Tunnel_Name], [Record_Time]
+              ,D.名稱
+              ,B.*
+              ,[mission], [shift]
+     FROM [dbo].[RFID_InOutRecord] A
+     LEFT JOIN
+     (
+         SELECT 
+                  [HR_EMP_ID], [HR_EMP_NAME], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+                  ,' + @sql_col2 + '
+         FROM
+         (
+              SELECT *
+              FROM
+              (
+                  SELECT [HR_EMP_ID], [DEPT], [HR_EMP_NAME], [LICENSE_NAME], [LICENSE_ID], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+                       ,case when DATEDIFF(day,GETDATE(),LICENSE_DUE_DATE) < 0 then 0 else 1 end Due_Day
+                  FROM [NEW_LICENSE]
+              ) A
+              PIVOT
+              (
+                  COUNT([Due_Day])
+                  FOR [LICENSE_NAME] IN (' + @sql_col + ')
+              ) T
+         ) AD
+         GROUP BY [HR_EMP_ID], [HR_EMP_NAME], [HR_ORG_CD], [HR_ORG_NAME], [HR_MNGR_CD], [HR_MNGR_NAME], [HR_MNGR_EMAIL], [BI_DATE]
+     ) B ON A.Employee_Id = B.HR_EMP_ID
+     LEFT JOIN ERT C ON B.HR_EMP_NAME = C.name
+     LEFT JOIN [employee_list] D ON A.Employee_Id = D.員工代號
+     ORDER BY Record_Time'
+
+EXEC (@sql_str)
+
+        目前包裝的 stored procedure 為 exec [dbo].[RFID_LICENSE]
